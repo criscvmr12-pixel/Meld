@@ -818,11 +818,28 @@ class MainActivity : FragmentActivity() {
                         navigationItems.map { it.route }.toSet()
                     }
 
+                val songListRoutePrefixes =
+                    remember {
+                        listOf(
+                            "search/",
+                            "album/",
+                            "artist/",
+                            "online_playlist/",
+                            "local_playlist/",
+                            "auto_playlist/",
+                            "cache_playlist/",
+                            "top_playlist/",
+                            "spotify_playlist/",
+                            "spotify_album/",
+                            "spotify_liked_songs",
+                        )
+                    }
+
                 val shouldShowNavigationBar =
                     remember(currentRoute, navigationItemRoutes) {
                         currentRoute == null ||
                             navigationItemRoutes.contains(currentRoute) ||
-                            currentRoute!!.startsWith("search/")
+                            songListRoutePrefixes.any { currentRoute!!.startsWith(it) }
                     }
 
                 val isLandscape = configuration.containerDpSize.width > configuration.containerDpSize.height
