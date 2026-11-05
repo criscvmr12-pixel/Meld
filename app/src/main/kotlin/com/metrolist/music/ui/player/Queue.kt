@@ -6,6 +6,7 @@
 package com.metrolist.music.ui.player
 
 import android.annotation.SuppressLint
+import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -288,7 +289,7 @@ fun Queue(
                             bottomEnd = 3.dp,
                         )
                     val middleShape = RoundedCornerShape(3.dp)
-                    val repeatShape =
+                    val endShape =
                         RoundedCornerShape(
                             topStart = 3.dp,
                             bottomStart = 3.dp,
@@ -348,19 +349,6 @@ fun Queue(
                     )
 
                     PlayerQueueButton(
-                        icon = R.drawable.lyrics,
-                        onClick = { onToggleLyrics() },
-                        isActive = showInlineLyrics,
-                        shape = middleShape,
-                        modifier = Modifier.size(buttonSize),
-                        textButtonColor = textButtonColor,
-                        iconButtonColor = iconButtonColor,
-                        iconSize = iconSize,
-                        textBackgroundColor = TextBackgroundColor,
-                        playerBackground = playerBackground,
-                    )
-
-                    PlayerQueueButton(
                         icon =
                             when (repeatMode) {
                                 Player.REPEAT_MODE_ALL -> R.drawable.repeat
@@ -372,7 +360,33 @@ fun Queue(
                         },
                         isActive = repeatMode != Player.REPEAT_MODE_OFF,
                         enabled = !isListenTogetherGuest,
-                        shape = repeatShape,
+                        shape = middleShape,
+                        modifier = Modifier.size(buttonSize),
+                        textButtonColor = textButtonColor,
+                        iconButtonColor = iconButtonColor,
+                        iconSize = iconSize,
+                        textBackgroundColor = TextBackgroundColor,
+                        playerBackground = playerBackground,
+                    )
+
+                    PlayerQueueButton(
+                        icon = R.drawable.share,
+                        onClick = {
+                            mediaMetadata?.let { metadata ->
+                                val intent =
+                                    Intent().apply {
+                                        action = Intent.ACTION_SEND
+                                        type = "text/plain"
+                                        putExtra(
+                                            Intent.EXTRA_TEXT,
+                                            "https://music.youtube.com/watch?v=${metadata.id}",
+                                        )
+                                    }
+                                context.startActivity(Intent.createChooser(intent, null))
+                            }
+                        },
+                        isActive = false,
+                        shape = endShape,
                         modifier = Modifier.size(buttonSize),
                         textButtonColor = textButtonColor,
                         iconButtonColor = iconButtonColor,

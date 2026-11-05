@@ -37,6 +37,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -62,6 +63,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedIconButton
@@ -1125,7 +1127,7 @@ fun BottomSheetPlayer(
                 Spacer(modifier = Modifier.width(12.dp))
 
                 if (useNewPlayerDesign) {
-                    val shareShape =
+                    val likeShape =
                         RoundedCornerShape(
                             topStart = 50.dp,
                             bottomStart = 50.dp,
@@ -1133,7 +1135,7 @@ fun BottomSheetPlayer(
                             bottomEnd = 3.dp,
                         )
 
-                    val favShape =
+                    val lyricsShape =
                         RoundedCornerShape(
                             topStart = 3.dp,
                             bottomStart = 3.dp,
@@ -1141,124 +1143,66 @@ fun BottomSheetPlayer(
                             bottomEnd = 50.dp,
                         )
 
-                    val middleShape = RoundedCornerShape(3.dp)
-
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        AnimatedContent(targetState = showInlineLyrics, label = "ShareButton") { showLyrics ->
-                            if (showLyrics) {
-                                FilledIconButton(
-                                    onClick = { isFullScreen = !isFullScreen },
-                                    shape = shareShape,
-                                    colors =
-                                        IconButtonDefaults.filledIconButtonColors(
-                                            containerColor = textButtonColor,
-                                            contentColor = iconButtonColor,
-                                        ),
-                                    modifier = Modifier.size(42.dp),
-                                ) {
-                                    Icon(
-                                        painter = painterResource(R.drawable.fullscreen),
-                                        contentDescription = null,
-                                        modifier = Modifier.size(24.dp),
-                                    )
-                                }
-                            } else {
-                                FilledIconButton(
-                                    onClick = {
-                                        val intent =
-                                            Intent().apply {
-                                                action = Intent.ACTION_SEND
-                                                type = "text/plain"
-                                                putExtra(
-                                                    Intent.EXTRA_TEXT,
-                                                    "https://music.youtube.com/watch?v=${mediaMetadata.id}",
-                                                )
-                                            }
-                                        context.startActivity(Intent.createChooser(intent, null))
-                                    },
-                                    shape = shareShape,
-                                    colors =
-                                        IconButtonDefaults.filledIconButtonColors(
-                                            containerColor = textButtonColor,
-                                            contentColor = iconButtonColor,
-                                        ),
-                                    modifier = Modifier.size(42.dp),
-                                ) {
-                                    Icon(
-                                        painter = painterResource(R.drawable.share),
-                                        contentDescription = null,
-                                        modifier = Modifier.size(24.dp),
-                                    )
-                                }
-                            }
+                        // For episodes, show saved state (inLibrary); for songs, show liked state
+                        val isEpisode = currentSong?.song?.isEpisode == true
+                        val isFavorite = if (isEpisode) currentSong?.song?.inLibrary != null else currentSong?.song?.liked == true
+                        FilledIconButton(
+                            onClick = playerConnection::toggleLike,
+                            shape = likeShape,
+                            colors =
+                                IconButtonDefaults.filledIconButtonColors(
+                                    containerColor = textButtonColor,
+                                    contentColor = iconButtonColor,
+                                ),
+                            modifier = Modifier.size(42.dp),
+                        ) {
+                            Icon(
+                                painter =
+                                    painterResource(
+                                        if (isFavorite) {
+                                            R.drawable.favorite
+                                        } else {
+                                            R.drawable.favorite_border
+                                        },
+                                    ),
+                                contentDescription = null,
+                                modifier = Modifier.size(24.dp),
+                            )
                         }
 
-                        AnimatedContent(targetState = showInlineLyrics, label = "LikeButton") { showLyrics ->
-                            if (showLyrics) {
-                                val currentLyrics by playerConnection.currentLyrics.collectAsStateWithLifecycle(initialValue = null)
-                                FilledIconButton(
-                                    onClick = {
-                                        menuState.show {
-                                            com.metrolist.music.ui.menu.LyricsMenu(
-                                                lyricsProvider = { currentLyrics },
-                                                songProvider = { currentSong?.song },
-                                                mediaMetadataProvider = { mediaMetadata },
-                                                onDismiss = menuState::dismiss,
-                                                onShowOffsetDialog = {
-                                                    bottomSheetPageState.show {
-                                                        ShowOffsetDialog(
-                                                            songProvider = { currentSong?.song },
-                                                        )
-                                                    }
-                                                },
-                                            )
-                                        }
-                                    },
-                                    shape = favShape,
-                                    colors =
-                                        IconButtonDefaults.filledIconButtonColors(
-                                            containerColor = textButtonColor,
-                                            contentColor = iconButtonColor,
-                                        ),
-                                    modifier = Modifier.size(42.dp),
-                                ) {
-                                    Icon(
-                                        painter = painterResource(R.drawable.more_horiz),
-                                        contentDescription = null,
-                                        modifier = Modifier.size(24.dp),
-                                    )
-                                }
+                        val lyricsIconTint =
+                            if (showInlineLyrics) {
+                                iconButtonColor
                             } else {
-                                // For episodes, show saved state (inLibrary); for songs, show liked state
-                                val isEpisode = currentSong?.song?.isEpisode == true
-                                val isFavorite = if (isEpisode) currentSong?.song?.inLibrary != null else currentSong?.song?.liked == true
-                                FilledIconButton(
-                                    onClick = playerConnection::toggleLike,
-                                    shape = favShape,
-                                    colors =
-                                        IconButtonDefaults.filledIconButtonColors(
-                                            containerColor = textButtonColor,
-                                            contentColor = iconButtonColor,
-                                        ),
-                                    modifier = Modifier.size(42.dp),
-                                ) {
-                                    Icon(
-                                        painter =
-                                            painterResource(
-                                                if (isFavorite) {
-                                                    R.drawable.favorite
-                                                } else {
-                                                    R.drawable.favorite_border
-                                                },
-                                            ),
-                                        contentDescription = null,
-                                        modifier = Modifier.size(24.dp),
-                                    )
+                                when (playerBackground) {
+                                    PlayerBackgroundStyle.BLUR, PlayerBackgroundStyle.GRADIENT -> Color.White
+                                    PlayerBackgroundStyle.DEFAULT -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                                 }
                             }
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier =
+                                Modifier
+                                    .size(42.dp)
+                                    .clip(lyricsShape)
+                                    .then(
+                                        if (showInlineLyrics) {
+                                            Modifier.background(textButtonColor)
+                                        } else {
+                                            Modifier.border(1.dp, textButtonColor.copy(alpha = 0.3f), lyricsShape)
+                                        },
+                                    ).clickable { showInlineLyrics = !showInlineLyrics },
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.lyrics),
+                                contentDescription = null,
+                                tint = lyricsIconTint,
+                                modifier = Modifier.size(24.dp),
+                            )
                         }
                     }
                 } else {
@@ -1836,6 +1780,27 @@ fun BottomSheetPlayer(
             }
         }
 
+        val toggleFullScreen: () -> Unit = { isFullScreen = !isFullScreen }
+        val showLyricsOptions: (LyricsEntity?) -> Unit = { lyrics ->
+            mediaMetadata?.let { metadata ->
+                menuState.show {
+                    com.metrolist.music.ui.menu.LyricsMenu(
+                        lyricsProvider = { lyrics },
+                        songProvider = { currentSong?.song },
+                        mediaMetadataProvider = { metadata },
+                        onDismiss = menuState::dismiss,
+                        onShowOffsetDialog = {
+                            bottomSheetPageState.show {
+                                ShowOffsetDialog(
+                                    songProvider = { currentSong?.song },
+                                )
+                            }
+                        },
+                    )
+                }
+            }
+        }
+
         when (LocalConfiguration.current.orientation) {
             Configuration.ORIENTATION_LANDSCAPE -> {
                 // Calculate vertical padding like OuterTune
@@ -1877,6 +1842,9 @@ fun BottomSheetPlayer(
                                     mediaMetadata = mediaMetadata,
                                     showLyrics = showLyrics,
                                     positionProvider = { effectivePosition },
+                                    controlsTint = TextBackgroundColor,
+                                    onToggleFullScreen = if (useNewPlayerDesign) toggleFullScreen else null,
+                                    onShowOptions = if (useNewPlayerDesign) showLyricsOptions else null,
                                 )
                             } else {
                                 Thumbnail(
@@ -1940,6 +1908,9 @@ fun BottomSheetPlayer(
                                     mediaMetadata = mediaMetadata,
                                     showLyrics = showLyrics,
                                     positionProvider = { effectivePosition },
+                                    controlsTint = TextBackgroundColor,
+                                    onToggleFullScreen = if (useNewPlayerDesign) toggleFullScreen else null,
+                                    onShowOptions = if (useNewPlayerDesign) showLyricsOptions else null,
                                 )
                             } else {
                                 Thumbnail(
@@ -1996,6 +1967,9 @@ fun InlineLyricsView(
     mediaMetadata: MediaMetadata?,
     showLyrics: Boolean,
     positionProvider: () -> Long,
+    controlsTint: Color = MaterialTheme.colorScheme.onSurface,
+    onToggleFullScreen: (() -> Unit)? = null,
+    onShowOptions: ((LyricsEntity?) -> Unit)? = null,
 ) {
     val playerConnection = LocalPlayerConnection.current ?: return
     val currentLyrics by playerConnection.currentLyrics.collectAsStateWithLifecycle(initialValue = null)
@@ -2127,6 +2101,34 @@ fun InlineLyricsView(
                         ),
                 ) {
                     lyricsContent()
+                }
+            }
+        }
+
+        if (onToggleFullScreen != null || onShowOptions != null) {
+            Row(
+                modifier =
+                    Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 8.dp, bottom = 4.dp),
+            ) {
+                onToggleFullScreen?.let { toggleFullScreen ->
+                    IconButton(onClick = toggleFullScreen) {
+                        Icon(
+                            painter = painterResource(R.drawable.fullscreen),
+                            contentDescription = null,
+                            tint = controlsTint,
+                        )
+                    }
+                }
+                onShowOptions?.let { showOptions ->
+                    IconButton(onClick = { showOptions(currentLyrics) }) {
+                        Icon(
+                            painter = painterResource(R.drawable.more_horiz),
+                            contentDescription = null,
+                            tint = controlsTint,
+                        )
+                    }
                 }
             }
         }
