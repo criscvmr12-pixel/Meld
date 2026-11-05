@@ -1195,12 +1195,17 @@ class MainActivity : FragmentActivity() {
                                                 topAppBarScrollBehavior.state.resetHeightOffset()
                                             }
                                         } else {
-                                            navController.navigate(screen.route) {
-                                                popUpTo(navController.graph.startDestinationId) {
-                                                    saveState = true
+                                            // restoreState can bring back a saved list screen instead of Home
+                                            val returnedToHome =
+                                                screen == Screens.Home && navController.popBackStack(screen.route, inclusive = false)
+                                            if (!returnedToHome) {
+                                                navController.navigate(screen.route) {
+                                                    popUpTo(navController.graph.startDestinationId) {
+                                                        saveState = true
+                                                    }
+                                                    launchSingleTop = true
+                                                    restoreState = true
                                                 }
-                                                launchSingleTop = true
-                                                restoreState = true
                                             }
                                         }
                                     }
