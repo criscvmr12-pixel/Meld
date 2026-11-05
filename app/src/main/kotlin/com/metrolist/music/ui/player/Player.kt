@@ -1150,15 +1150,19 @@ fun BottomSheetPlayer(
                         // For episodes, show saved state (inLibrary); for songs, show liked state
                         val isEpisode = currentSong?.song?.isEpisode == true
                         val isFavorite = if (isEpisode) currentSong?.song?.inLibrary != null else currentSong?.song?.liked == true
-                        FilledIconButton(
-                            onClick = playerConnection::toggleLike,
-                            shape = likeShape,
-                            colors =
-                                IconButtonDefaults.filledIconButtonColors(
-                                    containerColor = textButtonColor,
-                                    contentColor = iconButtonColor,
-                                ),
-                            modifier = Modifier.size(42.dp),
+                        val outlinedIconTint =
+                            when (playerBackground) {
+                                PlayerBackgroundStyle.BLUR, PlayerBackgroundStyle.GRADIENT -> Color.White
+                                PlayerBackgroundStyle.DEFAULT -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                            }
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier =
+                                Modifier
+                                    .size(42.dp)
+                                    .clip(likeShape)
+                                    .border(1.dp, textButtonColor.copy(alpha = 0.3f), likeShape)
+                                    .clickable(onClick = playerConnection::toggleLike),
                         ) {
                             Icon(
                                 painter =
@@ -1170,19 +1174,12 @@ fun BottomSheetPlayer(
                                         },
                                     ),
                                 contentDescription = null,
+                                tint = outlinedIconTint,
                                 modifier = Modifier.size(24.dp),
                             )
                         }
 
-                        val lyricsIconTint =
-                            if (showInlineLyrics) {
-                                iconButtonColor
-                            } else {
-                                when (playerBackground) {
-                                    PlayerBackgroundStyle.BLUR, PlayerBackgroundStyle.GRADIENT -> Color.White
-                                    PlayerBackgroundStyle.DEFAULT -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                                }
-                            }
+                        val lyricsIconTint = if (showInlineLyrics) iconButtonColor else outlinedIconTint
                         Box(
                             contentAlignment = Alignment.Center,
                             modifier =
@@ -2110,7 +2107,7 @@ fun InlineLyricsView(
                 modifier =
                     Modifier
                         .align(Alignment.BottomEnd)
-                        .padding(end = 8.dp, bottom = 4.dp),
+                        .padding(end = PlayerHorizontalPadding - 3.dp, bottom = 4.dp),
             ) {
                 onToggleFullScreen?.let { toggleFullScreen ->
                     IconButton(onClick = toggleFullScreen) {
