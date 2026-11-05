@@ -858,6 +858,8 @@ private fun LegacyMiniPlayer(
                 }
             }
 
+            LegacyFavoriteButton(playerConnection = playerConnection)
+
             LegacyPlayPauseButton(
                 playbackState = playbackState,
                 isCasting = isCasting,
@@ -896,6 +898,21 @@ private fun LegacyMiniPlayer(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun LegacyFavoriteButton(playerConnection: PlayerConnection) {
+    val currentSong by playerConnection.currentSong.collectAsStateWithLifecycle(initialValue = null)
+    // For episodes, show saved state (inLibrary); for songs, show liked state
+    val isEpisode = currentSong?.song?.isEpisode == true
+    val isFavorite = if (isEpisode) currentSong?.song?.inLibrary != null else currentSong?.song?.liked == true
+
+    IconButton(onClick = playerConnection::toggleLike) {
+        Icon(
+            painter = painterResource(if (isFavorite) R.drawable.favorite else R.drawable.favorite_border),
+            contentDescription = null,
+        )
     }
 }
 
