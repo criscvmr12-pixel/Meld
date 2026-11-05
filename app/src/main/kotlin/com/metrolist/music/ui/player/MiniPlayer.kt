@@ -899,10 +899,16 @@ private fun LegacyFavoriteButton(playerConnection: PlayerConnection) {
     val isEpisode = currentSong?.song?.isEpisode == true
     val isFavorite = if (isEpisode) currentSong?.song?.inLibrary != null else currentSong?.song?.liked == true
 
-    IconButton(onClick = playerConnection::toggleLike) {
+    // The heart glyph fills more of its canvas than play/next, so it is scaled down and nudged
+    // right to match their visual height and the spacing between the three buttons.
+    IconButton(
+        onClick = playerConnection::toggleLike,
+        modifier = Modifier.offset(x = 2.dp),
+    ) {
         Icon(
             painter = painterResource(if (isFavorite) R.drawable.favorite else R.drawable.favorite_border),
             contentDescription = null,
+            modifier = Modifier.size(18.dp),
         )
     }
 }
