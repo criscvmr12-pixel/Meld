@@ -866,6 +866,7 @@ private fun LegacyMiniPlayer(
                 castHandler = castHandler,
                 playerConnection = playerConnection,
                 listenTogetherManager = listenTogetherManager,
+                modifier = Modifier.offset(x = 2.dp),
             )
 
             IconButton(
@@ -909,15 +910,16 @@ private fun LegacyFavoriteButton(playerConnection: PlayerConnection) {
     val isFavorite = if (isEpisode) currentSong?.song?.inLibrary != null else currentSong?.song?.liked == true
 
     // The heart glyph fills more of its canvas than play/next, so it is scaled down and nudged
-    // right to match their visual height and the spacing between the three buttons.
+    // right to match their visual height and spacing. The outlined variant has a thicker stroke
+    // so its line weight stays at 2dp after scaling, like the play and next icons.
     IconButton(
         onClick = playerConnection::toggleLike,
         modifier = Modifier.offset(x = 2.dp),
     ) {
         Icon(
-            painter = painterResource(if (isFavorite) R.drawable.favorite else R.drawable.favorite_border),
+            painter = painterResource(if (isFavorite) R.drawable.favorite else R.drawable.favorite_border_mini),
             contentDescription = null,
-            modifier = Modifier.size(18.dp),
+            modifier = Modifier.size(17.3.dp),
         )
     }
 }
@@ -929,6 +931,7 @@ private fun LegacyPlayPauseButton(
     castHandler: CastConnectionHandler?,
     playerConnection: PlayerConnection,
     listenTogetherManager: ListenTogetherManager?,
+    modifier: Modifier = Modifier,
 ) {
     val isPlaying by playerConnection.isPlaying.collectAsState()
     val castIsPlaying by castHandler?.castIsPlaying?.collectAsState() ?: remember { mutableStateOf(false) }
@@ -937,6 +940,7 @@ private fun LegacyPlayPauseButton(
     val isMuted by playerConnection.isMuted.collectAsStateWithLifecycle()
 
     IconButton(
+        modifier = modifier,
         onClick = {
             if (isListenTogetherGuest) {
                 playerConnection.toggleMute()
