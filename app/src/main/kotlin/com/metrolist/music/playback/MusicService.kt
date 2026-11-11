@@ -2341,6 +2341,93 @@ class MusicService :
         }
     }
 
+    // Loudness is remembered per song so the gain is known as soon as the song starts, even when
+    // the database row is not written yet or the format has no contentLength (nothing is stored then).
+    private val loudnessByMediaId =
+        object : LinkedHashMap<String, Pair<Double?, Double?>>(64, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Pair<Double?, Double?>>?): Boolean =
+                size > MAX_REMEMBERED_LOUDNESS
+        }
+    private var normalizationLeadMessage: PlayerMessage? = null
+    private var nextGainPreAppliedFor: String? = null
+
+    private fun rememberLoudness(
+        mediaId: String,
+        loudnessDb: Double?,
+        perceptualLoudnessDb: Double?,
+        overwrite: Boolean,
+    ) {
+        if (loudnessDb == null && perceptualLoudnessDb == null) return
+        synchronized(loudnessByMediaId) {
+            if (overwrite || !loudnessByMediaId.containsKey(mediaId)) {
+                loudnessByMediaId[mediaId] = loudnessDb to perceptualLoudnessDb
+            }
+        }
+    }
+
+    private fun rememberedLoudness(mediaId: String): Pair<Double?, Double?>? = synchronized(loudnessByMediaId) { loudnessByMediaId[mediaId] }
+
+    private fun applyRememberedNormalizationNow() {
+        if (isCrossfading || !normalizationEnabledCached) return
+        val mediaId = player.currentMediaItem?.mediaId ?: return
+        val remembered = rememberedLoudness(mediaId) ?: return
+        val processor = playerNormalizationProcessors[player] ?: return
+        applyAudioNormalization(
+            processor = processor,
+            mediaId = mediaId,
+            loudnessDb = remembered.first,
+            perceptualLoudnessDb = remembered.second,
+            updateCache = true,
+        )
+    }
+
+    // The audio processor runs a few hundred ms ahead of what is heard, so changing the gain when the
+    // next song is reported as started is already late. Switch a bit before the current song ends.
+    private fun scheduleNextTrackNormalization() {
+        normalizationLeadMessage?.cancel()
+        normalizationLeadMessage = null
+
+        if (!normalizationEnabledCached || (crossfadeEnabled && crossfadeDuration > 0f)) return
+        val duration = player.duration
+        if (duration == C.TIME_UNSET || duration <= NORMALIZATION_LEAD_MS * 2) return
+        if (!player.hasNextMediaItem() || player.repeatMode == REPEAT_MODE_ONE) return
+
+        val triggerTime = duration - NORMALIZATION_LEAD_MS
+        if (triggerTime <= player.currentPosition) return
+
+        val targetMediaId = player.currentMediaItem?.mediaId ?: return
+        normalizationLeadMessage =
+            player
+                .createMessage { _, _ -> applyNextTrackNormalization(targetMediaId) }
+                .apply {
+                    setLooper(Looper.getMainLooper())
+                    setPosition(triggerTime)
+                    send()
+                }
+    }
+
+    private fun applyNextTrackNormalization(expectedMediaId: String) {
+        if (isCrossfading || !normalizationEnabledCached) return
+        if (player.currentMediaItem?.mediaId != expectedMediaId) return
+        val nextIndex = player.nextMediaItemIndex
+        if (nextIndex == C.INDEX_UNSET) return
+        val nextMediaId = player.getMediaItemAt(nextIndex).mediaId
+        if (nextMediaId == expectedMediaId) return
+        val remembered = rememberedLoudness(nextMediaId) ?: return
+        val processor = playerNormalizationProcessors[player] ?: return
+        val gain = normalizationGainMb(remembered.first, remembered.second, loudnessLevelCached.targetLufs) ?: return
+        processor.setTargetGain(gain)
+        processor.enabled = true
+        nextGainPreAppliedFor = expectedMediaId
+    }
+
+    // After a seek inside the current song the early switch no longer applies: go back to its own gain.
+    private fun restoreCurrentNormalizationIfPreApplied() {
+        if (nextGainPreAppliedFor == null) return
+        nextGainPreAppliedFor = null
+        applyCachedAudioNormalizationNow()
+    }
+
     private fun applyAudioNormalizationBeforePlayback(
         processor: VolumeNormalizationAudioProcessor,
         playerProvider: () -> ExoPlayer?,
@@ -2392,9 +2479,15 @@ class MusicService :
                 val normalizeAudio = normalizationEnabledCached
 
                 if (normalizeAudio && currentMediaId != null) {
-                    val format = withContext(Dispatchers.IO) {
-                        database.format(currentMediaId).first()
-                    }
+                    val remembered = rememberedLoudness(currentMediaId)
+                    val format =
+                        if (remembered != null) {
+                            null
+                        } else {
+                            withContext(Dispatchers.IO) {
+                                database.format(currentMediaId).first()
+                            }
+                        }
 
                     Timber.tag(TAG).d("Audio normalization enabled: $normalizeAudio")
 
@@ -2403,12 +2496,12 @@ class MusicService :
                         if (player.currentMediaItem?.mediaId != currentMediaId) return@withContext
 
                         val processor = playerNormalizationProcessors[player] ?: return@withContext
-                        if (format != null || cachedNormalizationMediaId != currentMediaId) {
+                        if (remembered != null || format != null || cachedNormalizationMediaId != currentMediaId) {
                             applyAudioNormalization(
                                 processor = processor,
                                 mediaId = currentMediaId,
-                                loudnessDb = format?.loudnessDb,
-                                perceptualLoudnessDb = format?.perceptualLoudnessDb,
+                                loudnessDb = remembered?.first ?: format?.loudnessDb,
+                                perceptualLoudnessDb = remembered?.second ?: format?.perceptualLoudnessDb,
                                 updateCache = true,
                             )
                         }
@@ -2579,7 +2672,10 @@ class MusicService :
 
         lastPlaybackSpeed = -1.0f // force update song
 
+        nextGainPreAppliedFor = null
+        applyRememberedNormalizationNow()
         setupAudioNormalization()
+        scheduleNextTrackNormalization()
 
         scrobbleManager?.onSongStop()
         if (player.playWhenReady && player.playbackState == Player.STATE_READY) {
@@ -2687,6 +2783,7 @@ class MusicService :
                 Timber.tag(TAG).d("Playback successful for $mediaId, reset retry count")
             }
             scheduleCrossfade()
+            scheduleNextTrackNormalization()
         }
 
         if (playbackState == Player.STATE_IDLE || playbackState == Player.STATE_ENDED) {
@@ -2785,6 +2882,7 @@ class MusicService :
             )
         ) {
             scheduleCrossfade()
+            scheduleNextTrackNormalization()
             val isBufferingOrReady =
                 player.playbackState == Player.STATE_BUFFERING || player.playbackState == Player.STATE_READY
             if (isBufferingOrReady && player.playWhenReady) {
@@ -3812,6 +3910,7 @@ class MusicService :
         return ResolvingDataSource.Factory(createCacheDataSource()) { dataSpec ->
             val mediaId = dataSpec.key ?: error("No media id")
             val storedFormat = runBlocking(Dispatchers.IO) { database.format(mediaId).first() }
+            rememberLoudness(mediaId, storedFormat?.loudnessDb, storedFormat?.perceptualLoudnessDb, overwrite = false)
             applyAudioNormalizationBeforePlayback(
                 processor = normalizationProcessor,
                 playerProvider = playerProvider,
@@ -3918,6 +4017,7 @@ class MusicService :
                 if (loudnessDb == null && perceptualLoudnessDb == null) {
                     Timber.tag(TAG).w("No loudness data available from YouTube for video: $mediaId")
                 }
+                rememberLoudness(mediaId, loudnessDb, perceptualLoudnessDb, overwrite = true)
                 applyAudioNormalizationBeforePlayback(
                     processor = normalizationProcessor,
                     playerProvider = playerProvider,
@@ -4811,7 +4911,9 @@ class MusicService :
         reason: Int,
     ) {
         if (reason == Player.DISCONTINUITY_REASON_SEEK) {
+            restoreCurrentNormalizationIfPreApplied()
             scheduleCrossfade()
+            scheduleNextTrackNormalization()
         }
     }
 
@@ -5056,6 +5158,8 @@ class MusicService :
         const val MAX_RETRY_COUNT = 10
 
         private const val INITIAL_BUFFER_RECOVERY_DELAY_MS = 15_000L
+        private const val NORMALIZATION_LEAD_MS = 400L
+        private const val MAX_REMEMBERED_LOUDNESS = 64
         private const val INITIAL_BUFFER_RECOVERY_POSITION_MS = 5_000L
         private const val TAG = "MusicService"
 
