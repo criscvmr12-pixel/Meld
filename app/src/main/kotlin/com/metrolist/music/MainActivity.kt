@@ -829,9 +829,6 @@ class MainActivity : FragmentActivity() {
                             "auto_playlist/",
                             "cache_playlist/",
                             "top_playlist/",
-                            "spotify_playlist/",
-                            "spotify_album/",
-                            "spotify_liked_songs",
                         )
                     }
 
