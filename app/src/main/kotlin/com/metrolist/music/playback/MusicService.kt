@@ -1802,6 +1802,10 @@ class MusicService :
 
         currentQueue = queue
         queueTitle = null
+        if (!restoringQueue) {
+            // Keep automixJob: screens call getAutomix() right before playQueue() for the new list.
+            automixItems.value = emptyList()
+        }
         val persistShuffleAcrossQueues = dataStore.get(PersistentShuffleAcrossQueuesKey, false)
         if (!persistShuffleAcrossQueues && !restoringQueue) {
             player.shuffleModeEnabled = false
@@ -1821,6 +1825,8 @@ class MusicService :
                         .filterVideoSongs(dataStore.get(HideVideoSongsKey, false))
                 }
             if (queue.preloadItem != null && player.playbackState == STATE_IDLE) return@launch
+            // A newer queue replaced this one while it was loading: don't mix its songs in.
+            if (currentQueue !== queue) return@launch
             if (initialStatus.title != null) {
                 queueTitle = initialStatus.title
             }
@@ -1962,11 +1968,15 @@ class MusicService :
         }
     }
 
+    private var automixJob: Job? = null
+
     fun getAutomix(playlistId: String) {
+        automixJob?.cancel()
+        automixItems.value = emptyList()
         if (dataStore.get(SimilarContent, true) &&
             !(dataStore.get(DisableLoadMoreWhenRepeatAllKey, false) && player.repeatMode == REPEAT_MODE_ALL)
         ) {
-            scope.launch(SilentHandler) {
+            automixJob = scope.launch(SilentHandler) {
                 try {
                     YouTube
                         .next(WatchEndpoint(playlistId = playlistId))
@@ -2051,6 +2061,7 @@ class MusicService :
     }
 
     fun clearAutomix() {
+        automixJob?.cancel()
         automixItems.value = emptyList()
     }
 
@@ -2704,14 +2715,16 @@ class MusicService :
             currentQueue.hasNextPage() &&
             !(cachedDisableLoadMoreWhenRepeatAll && player.repeatMode == REPEAT_MODE_ALL)
         ) {
+            val queueAtRequest = currentQueue
             scope.launch(SilentHandler) {
                 val mediaItems =
                     withContext(Dispatchers.IO) {
-                        currentQueue
+                        queueAtRequest
                             .nextPage()
                             .filterExplicit(cachedHideExplicit)
                             .filterVideoSongs(cachedHideVideoSongs)
                     }
+                if (currentQueue !== queueAtRequest) return@launch
                 if (player.playbackState != STATE_IDLE && mediaItems.isNotEmpty()) {
                     player.addMediaItems(mediaItems)
                     if (player.shuffleModeEnabled) {
