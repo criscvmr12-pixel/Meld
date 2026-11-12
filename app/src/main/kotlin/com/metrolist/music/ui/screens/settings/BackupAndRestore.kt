@@ -66,6 +66,9 @@ import com.metrolist.music.viewmodels.BackupPreviewInfo
 import com.metrolist.music.viewmodels.BackupRestoreViewModel
 import com.metrolist.music.viewmodels.ConvertedSongLog
 import com.metrolist.music.viewmodels.CsvImportState
+import android.widget.Toast
+import com.metrolist.music.ui.component.TextFieldDialog
+import com.metrolist.music.utils.SpotifyPlaylistReader
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.time.LocalDateTime
@@ -78,6 +81,7 @@ fun BackupAndRestore(
     viewModel: BackupRestoreViewModel = hiltViewModel(),
 ) {
     var importedTitle by remember { mutableStateOf("") }
+    var showSpotifyLinkDialog by rememberSaveable { mutableStateOf(false) }
     val importedSongs = remember { mutableStateListOf<Song>() }
     var showChoosePlaylistDialogOnline by rememberSaveable {
         mutableStateOf(false)
@@ -205,6 +209,11 @@ fun BackupAndRestore(
                         },
                     ),
                     Material3SettingsItem(
+                        title = { Text(stringResource(R.string.import_spotify)) },
+                        icon = painterResource(R.drawable.playlist_add),
+                        onClick = { showSpotifyLinkDialog = true },
+                    ),
+                    Material3SettingsItem(
                         title = { Text(stringResource(R.string.import_csv)) },
                         icon = painterResource(R.drawable.playlist_add),
                         onClick = {
@@ -231,6 +240,30 @@ fun BackupAndRestore(
             }
         },
     )
+
+    if (showSpotifyLinkDialog) {
+        TextFieldDialog(
+            title = { Text(stringResource(R.string.import_spotify)) },
+            placeholder = { Text(stringResource(R.string.spotify_link_hint)) },
+            isInputValid = { SpotifyPlaylistReader.extractPlaylistId(it) != null },
+            onDone = { link ->
+                coroutineScope.launch {
+                    Toast.makeText(context, R.string.spotify_reading_playlist, Toast.LENGTH_SHORT).show()
+                    SpotifyPlaylistReader
+                        .read(link)
+                        .onSuccess { playlist ->
+                            importedTitle = playlist.name
+                            importedSongs.clear()
+                            importedSongs.addAll(playlist.songs)
+                            showChoosePlaylistDialogOnline = true
+                        }.onFailure {
+                            Toast.makeText(context, R.string.spotify_import_failed, Toast.LENGTH_LONG).show()
+                        }
+                }
+            },
+            onDismiss = { showSpotifyLinkDialog = false },
+        )
+    }
 
     AddToPlaylistDialogOnline(
         isVisible = showChoosePlaylistDialogOnline,
